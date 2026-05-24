@@ -1,10 +1,27 @@
 import os
+import subprocess
+import sys
+
+# --- [မှော်ကွက်- TELETHON မရှိပါက ဆာဗာပေါ်တွင် အော်တိုသွင်းခိုင်းသည့်စနစ်] ---
+try:
+    import telethon
+except ImportError:
+    print("[SYSTEM] Telethon not found. Installing it automatically...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "telethon"])
+    import telethon
+
+try:
+    import telebot
+except ImportError:
+    print("[SYSTEM] pyTelegramBotAPI not found. Installing it automatically...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pyTelegramBotAPI"])
+    import telebot
+
 import re
 import asyncio
 from flask import Flask
 from threading import Thread
 from telethon import TelegramClient, events
-import telebot
 
 # --- [အခြေခံ SETTINGS များ] ---
 BOT_TOKEN = "8589041336:AAHs4twJ3WgVN0T7-fSZuSdU-AJUovRWoBc"
@@ -20,8 +37,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 client = TelegramClient('trx_session', API_ID, API_HASH)
 
 recent_results = []
-phone_code_hash = None  # Telegram ဘက်က ပို့ပေးတဲ့ သီးသန့် Hash ကုဒ်သိမ်းရန်
-current_phone_code = None  # မိတ်ဆွေထည့်မည့် OTP ကုဒ် သိမ်းရန်
+phone_code_hash = None
+current_phone_code = None
 
 # --- [ဗျူဟာမြောက် တွက်ချက်မှုအပိုင်း] ---
 def check_strategy_and_alert(period, result, level):
@@ -76,49 +93,45 @@ def home():
 def set_code(code):
     global current_phone_code
     current_phone_code = str(code).strip()
-    return f"<h3>OTP Code [{current_phone_code}] ကို ဆာဗာထဲ ထည့်သွင်းပြီးပါပြီဗျာ။ အကောင့်ထဲ စတင် Login ဝင်နေပါပြီ။ သင့် Bot ဆီက စာကို စောင့်ကြည့်ပေးပါ။</h3>"
+    return f"<h3>OTP Code [{current_phone_code}] ကို ဆာဗာထဲ ထည့်သွင်းပြီးပါပြီဗျာ။ အကောင့်ထဲ စတင် Login ဝင်နေပါပြီ။</h3>"
 
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
-# --- [INTERACTIVE TERMINAL BYPASS LOGIN] ---
+# --- [AUTOMATED LOGIN BYPASS] ---
 async def main_login():
     global phone_code_hash, current_phone_code
     print("[INIT] Connecting to Telegram Servers...")
     await client.connect()
     
     if not await client.is_user_authorized():
-        print(f"[LOGIN] Requesting OTP code for {MY_PHONE_NUMBER} (Bypassing Terminal)...")
+        print(f"[LOGIN] Requesting OTP code for {MY_PHONE_NUMBER}...")
         try:
-            # Render Terminal ကို ကျော်ပြီး ဖုန်းနံပါတ်ကို တိုက်ရိုက် လှမ်းပို့ခိုင်းခြင်း
             send_code_result = await client.send_code_request(MY_PHONE_NUMBER)
             phone_code_hash = send_code_result.phone_code_hash
             
-            # မိတ်ဆွေဆီ စာလှမ်းပို့ခိုင်းခြင်း
             login_instruction = (
                 "🔑 **Telegram OTP Code တောင်းနေပါပြီဗျာ!**\n\n"
                 "မိတ်ဆွေရဲ့ Telegram Official အကောင့်ထဲကို ရောက်လာတဲ့ **ဂဏန်း ၅ လုံး** ကို အောက်ပါလင့်ခ်ရဲ့ အနောက်ဆုံးမှာ အစားထိုးပြီး Chrome Browser ထဲမှာ ရိုက်ထည့်ကာ ဝင်ပေးလိုက်ပါဗျာ -\n\n"
                 "`https://trx-bot-hika.onrender.com/set_code/ဒီမှာဂဏန်း၅လုံးထည့်`"
             )
             bot.send_message(MY_CHAT_ID, login_instruction, parse_mode="Markdown")
-            print("[LOGIN] Instruction message sent to your Telegram Bot.")
+            print("[LOGIN] Instruction link sent to Telegram Bot.")
         except Exception as e:
             print(f"[ERROR] Cannot send code request: {e}")
             return
             
-        # မိတ်ဆွေက Web Link ကနေတစ်ဆင့် ကုဒ်ရိုက်ထည့်ပေးမည့်အချိန်အထိ စောင့်ဆိုင်းခြင်း
         while current_phone_code is None:
             await asyncio.sleep(1)
             
         print(f"[LOGIN] Logging in with OTP Code: {current_phone_code}")
         try:
-            # OTP ကုဒ်ကို တိုက်ရိုက် အတင်းအဓမ္မ ထည့်သွင်းခိုင်းခြင်း
             await client.sign_in(MY_PHONE_NUMBER, current_phone_code, phone_code_hash=phone_code_hash)
             print("[LOGIN] Successfully authorized with Telegram!")
-            bot.send_message(MY_CHAT_ID, "✅ **Telegram Account ချိတ်ဆက်မှု အောင်မြင်သွားပါပြီဗျာ!**\n\nSniper Bot အသက်ဝင်သွားပါပြီ။ Mr.Wai SIGNAL ဂရုထဲက စာတွေကို စတင်စောင့်ကြည့်နေပါပြီဗျာ။")
+            bot.send_message(MY_CHAT_ID, "✅ **Telegram Account ချိတ်ဆက်မှု အောင်မြင်သွားပါပြီဗျာ!**\n\nSniper Bot အသက်ဝင်သွားပါပြီ။ Mr.Wai SIGNAL ဂရုထဲက စာတွေကို စတင်စောင့်ကြည့်နေပါပြီ။")
         except Exception as e:
             print(f"[ERROR] Login Failed: {e}")
-            bot.send_message(MY_CHAT_ID, f"❌ Sign in မအောင်မြင်ပါဗျာ။ Error: {e}\nကျေးဇူးပြု၍ Render ကို တစ်ခေါက်ပြန်ပွင့်ပေးပါ။")
+            bot.send_message(MY_CHAT_ID, f"❌ Sign in မအောင်မြင်ပါဗျာ။ Error: {e}")
             return
             
     print("[START] Connected! Listening to target private group...")
@@ -129,6 +142,5 @@ if __name__ == '__main__':
     t.daemon = True
     t.start()
     
-    # Async Event Loop ဖြင့် မောင်းနှင်ခြင်း
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main_login())
