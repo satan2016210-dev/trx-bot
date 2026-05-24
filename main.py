@@ -2,7 +2,7 @@ import os
 import subprocess
 import sys
 
-# --- [မှော်ကွက်- TELETHON မရှိပါက ဆာဗာပေါ်တွင် အော်တိုသွင်းခိုင်းသည့်စနစ်] ---
+# --- [TELETHON နှင့် BOT API ကို အော်တိုသွင်းသည့်စနစ်] ---
 try:
     import telethon
 except ImportError:
@@ -142,5 +142,11 @@ if __name__ == '__main__':
     t.daemon = True
     t.start()
     
-    loop = asyncio.get_event_loop()
+    # Python Version အသစ်များတွင် Event Loop အသစ်ဆောက်၍ အတင်းမောင်းခိုင်းခြင်း (RuntimeError ကျော်ရန်)
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
     loop.run_until_complete(main_login())
