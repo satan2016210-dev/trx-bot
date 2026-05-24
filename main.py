@@ -22,7 +22,7 @@ except ImportError:
 from telethon import TelegramClient, events
 
 # --- [အခြေခံ SETTINGS များ] ---
-BOT_TOKEN = "8589041336:AAHs4twJ3WgVN0T7-fSZuSdU-AJUovRWoBc"
+BOT_TOKEN = "8589041336:AAEJ3gwKssb8Dq75tRb6MH08UXLCG74MCQ8"
 MY_CHAT_ID = 1141743561
 MY_PHONE_NUMBER = "+959420724320"
 
