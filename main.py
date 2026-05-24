@@ -23,9 +23,9 @@ from flask import Flask
 from threading import Thread
 from telethon import TelegramClient, events
 
-# --- [အခြေခံ SETTINGS များ] ---
+# --- [အခြေခံ SETTINGS များ - မိတ်ဆွေ၏ အချက်အလက်များ] ---
 BOT_TOKEN = "8589041336:AAHs4twJ3WgVN0T7-fSZuSdU-AJUovRWoBc"
-MY_CHAT_ID = "1141743561"
+MY_CHAT_ID = 1141743561  # ဂဏန်းသက်သက်အဖြစ် ပြောင်းလဲထားပါသည်
 MY_PHONE_NUMBER = "+959420724320"
 
 API_ID = 32962994
@@ -82,23 +82,30 @@ async def my_event_handler(event):
     except Exception as e:
         print(f"[ERROR] Handler Error: {e}")
 
-# --- [WEB SERVER & OTP RECEIVER ONSITE] ---
+# --- [BOT ကနေ OTP ကုဒ်ကို တိုက်ရိုက်ဖတ်မည့်အပိုင်း] ---
+@bot.message_handler(func=lambda message: message.chat.id == MY_CHAT_ID)
+def handle_otp_from_user(message):
+    global current_phone_code
+    text = message.text.strip()
+    
+    # မိတ်ဆွေ ပို့လိုက်တဲ့စာက ဂဏန်း ၅ လုံး ဖြစ်မဖြစ် စစ်ဆေးခြင်း
+    if re.match(r"^\d{5}$", text):
+        current_phone_code = text
+        bot.reply_to(message, f"📥 OTP ကုဒ် [{text}] ကို ဆာဗာထဲ ထည့်သွင်းလိုက်ပါပြီဗျာ။ အကောင့်ထဲ စတင် Login ဝင်နေပါပြီ...")
+    else:
+        bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ Telegram က ပို့ပေးတဲ့ ဂဏန်း ၅ လုံးသက်သက်ပဲ စာရိုက်ပို့ပေးပါဗျာ။")
+
+# --- [WEB SERVER - RENDER အတွက် အသေထားရမည့်အပိုင်း] ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running perfectly. Waiting for OTP web input if requested."
-
-@app.route('/set_code/<code>')
-def set_code(code):
-    global current_phone_code
-    current_phone_code = str(code).strip()
-    return f"<h3>OTP Code [{current_phone_code}] ကို ဆာဗာထဲ ထည့်သွင်းပြီးပါပြီဗျာ။ အကောင့်ထဲ စတင် Login ဝင်နေပါပြီ။</h3>"
+    return "Bot is running perfectly. Waiting for OTP via Telegram Chat Bot."
 
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
-# --- [AUTOMATED LOGIN BYPASS] ---
+# --- [AUTOMATED TELETHON LOGIN] ---
 async def main_login():
     global phone_code_hash, current_phone_code
     print("[INIT] Connecting to Telegram Servers...")
@@ -110,10 +117,11 @@ async def main_login():
             send_code_result = await client.send_code_request(MY_PHONE_NUMBER)
             phone_code_hash = send_code_result.phone_code_hash
             
+            # မိတ်ဆွေဆီ စာလှမ်းပို့ပြီး ကုဒ်တောင်းခြင်း
             login_instruction = (
-                "🔑 **Telegram OTP Code တောင်းနေပါပြီဗျာ!**\n\n"
-                "မိတ်ဆွေရဲ့ Telegram Official အကောင့်ထဲကို ရောက်လာတဲ့ **ဂဏန်း ၅ လုံး** ကို အောက်ပါလင့်ခ်ရဲ့ အနောက်ဆုံးမှာ အစားထိုးပြီး Chrome Browser ထဲမှာ ရိုက်ထည့်ကာ ဝင်ပေးလိုက်ပါဗျာ -\n\n"
-                "`https://trx-bot-hika.onrender.com/set_code/ဒီမှာဂဏန်း၅လုံးထည့်`"
+                "🔑 **Telegram OTP Code ရောက်လာပါပြီဗျာ!**\n\n"
+                "မိတ်ဆွေရဲ့ Telegram Official အကောင့်ထဲကို ရောက်လာတဲ့ **ဂဏန်း ၅ လုံး** ကို **ဒီ Bot ချက်တင်ထဲမှာတင် စာအဖြစ် တိုက်ရိုက် ရိုက်ပို့ပေးလိုက်ပါဗျာ**။\n\n"
+                "*(ဥပမာ - `54321` လို့ ဂဏန်းချည်းပဲ ရိုက်ပို့ပေးရမှာပါဗျ)*"
             )
             bot.send_message(MY_CHAT_ID, login_instruction, parse_mode="Markdown")
             print("[LOGIN] Instruction link sent to Telegram Bot.")
@@ -121,6 +129,7 @@ async def main_login():
             print(f"[ERROR] Cannot send code request: {e}")
             return
             
+        # မိတ်ဆွေက Bot ထဲမှာ စာရိုက်ပို့မည့်အချိန်အထိ စောင့်ဆိုင်းခြင်း
         while current_phone_code is None:
             await asyncio.sleep(1)
             
@@ -131,18 +140,28 @@ async def main_login():
             bot.send_message(MY_CHAT_ID, "✅ **Telegram Account ချိတ်ဆက်မှု အောင်မြင်သွားပါပြီဗျာ!**\n\nSniper Bot အသက်ဝင်သွားပါပြီ။ Mr.Wai SIGNAL ဂရုထဲက စာတွေကို စတင်စောင့်ကြည့်နေပါပြီ။")
         except Exception as e:
             print(f"[ERROR] Login Failed: {e}")
-            bot.send_message(MY_CHAT_ID, f"❌ Sign in မအောင်မြင်ပါဗျာ။ Error: {e}")
+            bot.send_message(MY_CHAT_ID, f"❌ Sign in မအောင်မြင်ပါဗျာ။ Error: {e}\nကျေးဇူးပြု၍ Render ကို တစ်ခေါက် Manual Deploy ပြန်လုပ်ပေးပါ။")
             return
             
     print("[START] Connected! Listening to target private group...")
     await client.run_until_disconnected()
 
+# Bot ရဲ့ Message Listener ကို နောက်ကွယ်ကနေ မောင်းထားရန်
+def run_bot_polling():
+    bot.infinity_polling()
+
 if __name__ == '__main__':
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
+    # Web Server မောင်းနှင်ခြင်း
+    t_flask = Thread(target=run_flask)
+    t_flask.daemon = True
+    t_flask.start()
     
-    # Python Version အသစ်များတွင် Event Loop အသစ်ဆောက်၍ အတင်းမောင်းခိုင်းခြင်း (RuntimeError ကျော်ရန်)
+    # Telegram Bot Messages ဖတ်မည့်စနစ် မောင်းနှင်ခြင်း
+    t_bot = Thread(target=run_bot_polling)
+    t_bot.daemon = True
+    t_bot.start()
+    
+    # Async Event Loop ဖြင့် Telethon ကို အသက်သွင်းခြင်း
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
