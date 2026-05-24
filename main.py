@@ -22,7 +22,7 @@ except ImportError:
 from telethon import TelegramClient, events
 
 # --- [အခြေခံ SETTINGS များ] ---
-BOT_TOKEN = "8589041336:AAEJ3gwKssb8Dq75tRb6MH08UXLCG74MCQ8"
+BOT_TOKEN = "8589041336:AAHs4twJ3WgVN0T7-fSZuSdU-AJUovRWoBc"
 MY_CHAT_ID = 1141743561
 MY_PHONE_NUMBER = "+959420724320"
 
@@ -30,12 +30,12 @@ API_ID = 32962994
 API_HASH = "527688e1a63242cae36f4b5f4e4339e2"
 TARGET_GROUP_NAME = "Mr.Wai SIGNAL"
 
-# Bot နှင့် Async Client တည်ဆောက်ခြင်း
 bot = telebot.TeleBot(BOT_TOKEN)
 client = TelegramClient('trx_session', API_ID, API_HASH)
 
 recent_results = []
 phone_code_hash = None
+is_processing = False  # ထပ်ခါထပ်ခါ ကုဒ်မတောင်းမိစေရန် သော့ခတ်စနစ်
 
 # --- [ဗျူဟာမြောက် တွက်ချက်မှုအပိုင်း] ---
 def check_strategy_and_alert(period, result, level):
@@ -71,11 +71,10 @@ def run_flask():
 
 # --- [အဓိက ASYNCIO ပင်မစနစ်ကြီး] ---
 async def main():
-    global phone_code_hash
-    print("[INIT] Telethon Client နှင့် ချိတ်ဆက်နေပါသည်...")
+    global phone_code_hash, is_processing
+    print("[INIT] Connecting to Telegram...")
     await client.connect()
     
-    # Target Private Group ကို စောင့်ကြည့်မည့် Handler
     @client.on(events.NewMessage)
     async def my_event_handler(event):
         try:
@@ -88,13 +87,18 @@ async def main():
         except Exception as e:
             print(f"[ERROR] Handler Error: {e}")
 
-    # မိတ်ဆွေဆီကို အဆင်သင့်ဖြစ်ကြောင်း စာလှမ်းပို့ခြင်း
     try:
-        bot.send_message(MY_CHAT_ID, "🔔 **TRX Sniper Bot ဆာဗာပေါ်တွင် အသင့်ဖြစ်ပါပြီ!**\n\nTelegram ဆီကနေ OTP ကုဒ်တောင်းဖို့အတွက် အခု ဒီ Bot ထဲကို **`/start`** လို့ စာရိုက်ပို့ပေးလိုက်ပါဗျာ။")
+        bot.send_message(MY_CHAT_ID, "🔔 **TRX Sniper Bot ဆာဗာပေါ်တွင် အသင့်ဖြစ်ပါပြီ!**\n\nTelegram ဆီကနေ OTP ကုဒ်တောင်းဖို့အတွက် အခု ဒီ Bot ထဲကို **`/start`** လို့ တစ်ချက်ပဲ နှိပ်ပြီး စာရိုက်ပို့ပေးလိုက်ပါဗျာ။")
     except Exception as e:
-        print(f"[BOT ERROR] Send greeting failed: {e}")
+        print(f"[BOT ERROR] Greeting failed: {e}")
 
-    # Telegram Bot ကနေ စာလာဖတ်မည့် Event Loop
+    # Telegram Bot ကနေ စာလာဖတ်မည့်စနစ် (Long Polling ကဲ့သို့ စနစ်တကျ ပြောင်းလဲခြင်း)
+    bot.last_update_id = 0
+    # ကြိုတင်ပြီး Update ID များကို ရှင်းလင်းခြင်း
+    updates = bot.get_updates(timeout=1)
+    if updates:
+        bot.last_update_id = updates[-1].update_id
+
     while True:
         updates = bot.get_updates(offset=(bot.last_update_id + 1 if bot.last_update_id else None), timeout=1)
         for update in updates:
@@ -102,9 +106,15 @@ async def main():
                 text = update.message.text.strip()
                 bot.last_update_id = update.update_id
                 
-                # ၁။ /start ပို့လာလျှင် OTP အတင်းတောင်းခိုင်းခြင်း
+                # ၁။ /start ပို့လာလျှင် (ပတ်မနေအောင် သော့ခတ်ပြီး တစ်ခေါက်ပဲ တောင်းမည်)
                 if text == "/start":
-                    bot.send_message(MY_CHAT_ID, "⏳ Telegram Official ထံမှ OTP Code တောင်းဆိုနေပါပြီ။ စက္ကန့်ပိုင်းလောက် စောင့်ပေးပါဗျာ...")
+                    if is_processing:
+                        bot.send_message(MY_CHAT_ID, "⚠️ ခဏစောင့်ပါဦးဗျာ။ အနောက်မှာ အလုပ်လုပ်နေဆဲ ဖြစ်ပါတယ်။")
+                        continue
+                        
+                    is_processing = True
+                    bot.send_message(MY_CHAT_ID, "⏳ Telegram Official ထံမှ OTP Code (တစ်ခေါက်တည်း) တောင်းဆိုနေပါပြီ။ ခဏစောင့်ပေးပါဗျာ...")
+                    
                     try:
                         if not await client.is_user_authorized():
                             send_code_result = await client.send_code_request(MY_PHONE_NUMBER)
@@ -113,20 +123,27 @@ async def main():
                         else:
                             bot.send_message(MY_CHAT_ID, "✅ အကောင့်က ဝင်ပြီးသား ဖြစ်နေပါတယ်ဗျာ။ Sniper Bot စတင် အလုပ်လုပ်နေပါပြီ။")
                     except Exception as e:
-                        bot.send_message(MY_CHAT_ID, f"❌ ကုဒ်တောင်း၍မရပါ။ Error: {e}\n\n*(လိုင်းမကောင်းခြင်း သို့မဟုတ် တောင်းတာ စိပ်သွားခြင်းဖြစ်နိုင်၍ ၁ မိနစ်နေမှ `/start` ပြန်နှိပ်ပါ)*")
+                        bot.send_message(MY_CHAT_ID, f"❌ ကုဒ်တောင်း၍မရပါ။ Error: {e}\n\n၁ မိနစ်နေမှ `/start` ပြန်နှိပ်ပါ။")
+                    finally:
+                        is_processing = False
 
-                # ၂။ ဂဏန်း ၅ လုံး ပို့လာလျှင် လော့ဂ်အင်ဝင်ခြင်း
+                # ၂။ ဂဏန်း ၅ လုံး ပို့လာလျှင်
                 elif re.match(r"^\d{5}$", text):
+                    if is_processing:
+                        continue
+                    is_processing = True
                     bot.send_message(MY_CHAT_ID, f"📥 OTP ကုဒ် [{text}] ကို ရရှိပါပြီ။ အကောင့်ထဲ ဝင်နေပါပြီ...")
                     try:
                         await client.sign_in(MY_PHONE_NUMBER, text, phone_code_hash=phone_code_hash)
                         bot.send_message(MY_CHAT_ID, "✅ **Telegram Account ချိတ်ဆက်မှု အောင်မြင်သွားပါပြီဗျာ!**\n\nSniper Bot စတင်အသက်ဝင်သွားပါပြီ။")
                     except telethon.errors.SessionPasswordNeededError:
-                        bot.send_message(MY_CHAT_ID, "⚠️ သင့်အကောင့်မှာ Two-Step Verification (2FA Password) ခံထားပါတယ်ဗျာ။ ကျေးဇူးပြု၍ သင့်ရဲ့ လုံခြုံရေး Password အစစ်ကို Bot ထဲ ရိုက်ပို့ပေးပါဗျ။")
+                        bot.send_message(MY_CHAT_ID, "⚠️ သင့်အကောင့်မှာ Two-Step Verification (2FA) ခံထားပါတယ်ဗျာ။ သင့်ရဲ့ လုံခြုံရေး Password ကို Bot ထဲ ရိုက်ပို့ပေးပါဗျ။")
                     except Exception as e:
-                        bot.send_message(MY_CHAT_ID, f"❌ လော့ဂ်အင်မအောင်မြင်ပါ။ Error: {e}\nပြန်စရန် `/start` ပြန်နှိပ်ပါ။")
+                        bot.send_message(MY_CHAT_ID, f"❌ လော့ဂ်အင်မအောင်မြင်ပါ။ Error: {e}\n\nပြန်စရန် `/start` ပြန်နှိပ်ပါ။")
+                    finally:
+                        is_processing = False
                 
-                # ၃။ တကယ်လို့ 2FA Password တောင်းလို့ စာရိုက်ပို့လာရင် ဝင်ပေးမည့်စနစ်
+                # ၃။ 2FA Password ရိုက်ပို့လာလျှင်
                 elif len(text) > 5 and phone_code_hash:
                     try:
                         await client.sign_in(password=text)
@@ -137,10 +154,8 @@ async def main():
         await asyncio.sleep(0.5)
 
 if __name__ == '__main__':
-    # Flask Web Server မောင်းနှင်ခြင်း
     t_flask = Thread(target=run_flask)
     t_flask.daemon = True
     t_flask.start()
     
-    # Asyncio ပင်မစနစ်ကို Run ခြင်း
     asyncio.run(main())
