@@ -6,7 +6,7 @@ from threading import Thread
 from telethon import TelegramClient, events
 import telebot
 
-# --- [အခြေခံ SETTINGS များ - မိတ်ဆွေ၏ အချက်အလက်များ ထည့်သွင်းပြီး] ---
+# --- [အခြေခံ SETTINGS များ] ---
 BOT_TOKEN = "8589041336:AAHs4twJ3WgVN0T7-fSZuSdU-AJUovRWoBc"
 MY_CHAT_ID = "1141743561"
 MY_PHONE_NUMBER = "+959420724320"
@@ -20,7 +20,8 @@ bot = telebot.TeleBot(BOT_TOKEN)
 client = TelegramClient('trx_session', API_ID, API_HASH)
 
 recent_results = []
-current_phone_code = None  # OTP ကုဒ် ယာယီသိမ်းရန်
+phone_code_hash = None  # Telegram ဘက်က ပို့ပေးတဲ့ သီးသန့် Hash ကုဒ်သိမ်းရန်
+current_phone_code = None  # မိတ်ဆွေထည့်မည့် OTP ကုဒ် သိမ်းရန်
 
 # --- [ဗျူဟာမြောက် တွက်ချက်မှုအပိုင်း] ---
 def check_strategy_and_alert(period, result, level):
@@ -29,12 +30,9 @@ def check_strategy_and_alert(period, result, level):
     if len(recent_results) > 3:
         recent_results.pop(0)
         
-    print(f"[INFO] အလှည့်: {period} | ရလဒ်: {result} | Level: {level} | ပတ်လမ်းလက်ရှိအခြေအနေ: {recent_results}")
+    print(f"[INFO] အလှည့်: {period} | ရလဒ်: {result} | Level: {level} | ပတ်လမ်း: {recent_results}")
     
-    # ရလဒ် ၃ ကြိမ် ပြည့်ပြီဆိုမှ ဗျူဟာကို စစ်မည်
     if len(recent_results) == 3:
-        # ဗျူဟာအိုင်ဒီယာ - (၀၊ ၁၊ ၂ မိနစ် အတွဲလိုက်ကြီး ၃ ကြိမ်ဆက်တိုက် S မပါရဘူး)
-        # တစ်နည်းအားဖြင့် ၃ ကြိမ်ဆက်တိုက် 'B' ချည်းပဲ ထွက်လာခဲ့လျှင် (Big, Big, Big ဖြစ်လျှင်) Sniper မိပြီ!
         if recent_results == ['B', 'B', 'B']:
             alert_message = (
                 "🎯 **TRX SNIPER ALERT!** 🎯\n\n"
@@ -46,7 +44,7 @@ def check_strategy_and_alert(period, result, level):
             )
             try:
                 bot.send_message(MY_CHAT_ID, alert_message, parse_mode="Markdown")
-                print("[SUCCESS] Alert message sent to your Telegram!")
+                print("[SUCCESS] Alert sent to Telegram!")
             except Exception as e:
                 print(f"[ERROR] Failed to send alert: {e}")
 
@@ -56,84 +54,81 @@ async def my_event_handler(event):
     try:
         chat = await event.get_chat()
         chat_title = getattr(chat, 'title', '')
-        
-        # သတ်မှတ်ထားသည့် Group နာမည် ဟုတ်မဟုတ် စစ်ဆေးခြင်း
         if TARGET_GROUP_NAME in chat_title:
             message_text = event.raw_text
-            
-            # 'Trx 44 B2' သို့မဟုတ် 'Trx 37 S1' စာသားပုံစံကို ဖတ်ခြင်း
             match = re.search(r"Trx\s+(\d+)\s+([BS])(\d+)", message_text, re.IGNORECASE)
             if match:
-                period = match.group(1)   # အလှည့်
-                result = match.group(2).upper()  # ရလဒ် B သို့မဟုတ် S
-                level = match.group(3)    # Level
-                
+                period = match.group(1)
+                result = match.group(2).upper()
+                level = match.group(3)
                 check_strategy_and_alert(period, result, level)
     except Exception as e:
         print(f"[ERROR] Handler Error: {e}")
 
-# --- [WEB SERVER & OTP RECEIVER အပိုင်း] ---
+# --- [WEB SERVER & OTP RECEIVER ONSITE] ---
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running. Waiting for OTP code via Web Link if needed."
+    return "Bot is running perfectly. Waiting for OTP web input if requested."
 
-# Render ပေါ်တွင် OTP ဖြည့်ရန် စာမျက်နှာလင့်ခ်ဖန်တီးခြင်း
 @app.route('/set_code/<code>')
 def set_code(code):
     global current_phone_code
-    current_phone_code = code
-    return f"OTP Code {code} received! App is now signing in..."
+    current_phone_code = str(code).strip()
+    return f"<h3>OTP Code [{current_phone_code}] ကို ဆာဗာထဲ ထည့်သွင်းပြီးပါပြီဗျာ။ အကောင့်ထဲ စတင် Login ဝင်နေပါပြီ။ သင့် Bot ဆီက စာကို စောင့်ကြည့်ပေးပါ။</h3>"
 
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
-# --- [AUTOMATED TELETHON LOGIN] ---
+# --- [INTERACTIVE TERMINAL BYPASS LOGIN] ---
 async def main_login():
-    global current_phone_code
+    global phone_code_hash, current_phone_code
+    print("[INIT] Connecting to Telegram Servers...")
     await client.connect()
     
-    # Login ဝင်ရန်လိုအပ်ပါက OTP တောင်းမည်
     if not await client.is_user_authorized():
-        print(f"[LOGIN] Sending code request to {MY_PHONE_NUMBER}...")
+        print(f"[LOGIN] Requesting OTP code for {MY_PHONE_NUMBER} (Bypassing Terminal)...")
         try:
-            await client.send_code_request(MY_PHONE_NUMBER)
+            # Render Terminal ကို ကျော်ပြီး ဖုန်းနံပါတ်ကို တိုက်ရိုက် လှမ်းပို့ခိုင်းခြင်း
+            send_code_result = await client.send_code_request(MY_PHONE_NUMBER)
+            phone_code_hash = send_code_result.phone_code_hash
             
-            # မိတ်ဆွေ၏ ကိုယ်ပိုင် Bot ဆီသို့ လင့်ခ်လှမ်းပို့ခိုင်းခြင်း
+            # မိတ်ဆွေဆီ စာလှမ်းပို့ခိုင်းခြင်း
             login_instruction = (
                 "🔑 **Telegram OTP Code တောင်းနေပါပြီဗျာ!**\n\n"
-                "မိတ်ဆွေရဲ့ Telegram Official ကနေ ပို့ပေးလိုက်တဲ့ ဂဏန်း ၅ လုံးကို အောက်ပါလင့်ခ်ရဲ့ အနောက်မှာ အစားထိုးပြီး Browser (Chrome) ထဲ ဝင်ပေးလိုက်ပါဗျာ -\n\n"
-                "`https://trx-bot-hika.onrender.com/set_code/ဒီနေရာမှာဂဏန်း၅လုံးထည့်`"
+                "မိတ်ဆွေရဲ့ Telegram Official အကောင့်ထဲကို ရောက်လာတဲ့ **ဂဏန်း ၅ လုံး** ကို အောက်ပါလင့်ခ်ရဲ့ အနောက်ဆုံးမှာ အစားထိုးပြီး Chrome Browser ထဲမှာ ရိုက်ထည့်ကာ ဝင်ပေးလိုက်ပါဗျာ -\n\n"
+                "`https://trx-bot-hika.onrender.com/set_code/ဒီမှာဂဏန်း၅လုံးထည့်`"
             )
             bot.send_message(MY_CHAT_ID, login_instruction, parse_mode="Markdown")
+            print("[LOGIN] Instruction message sent to your Telegram Bot.")
         except Exception as e:
             print(f"[ERROR] Cannot send code request: {e}")
             return
             
-        # လင့်ခ်ကနေတစ်ဆင့် ဂဏန်းဝင်လာသည်အထိ ဆာဗာကို စောင့်ခိုင်းခြင်း
+        # မိတ်ဆွေက Web Link ကနေတစ်ဆင့် ကုဒ်ရိုက်ထည့်ပေးမည့်အချိန်အထိ စောင့်ဆိုင်းခြင်း
         while current_phone_code is None:
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
             
-        print(f"[LOGIN] Attempting to sign in with code: {current_phone_code}")
+        print(f"[LOGIN] Logging in with OTP Code: {current_phone_code}")
         try:
-            await client.sign_in(MY_PHONE_NUMBER, current_phone_code)
-            print("[LOGIN] Successfully authorized!")
-            bot.send_message(MY_CHAT_ID, "✅ **Telegram Account ချိတ်ဆက်မှု အောင်မြင်သွားပါပြီဗျာ!**\n\nSniper Bot စတင် အလုပ်လုပ်နေပါပြီ။ Mr.Wai SIGNAL ဂရုထဲမှာ ၃ ကြိမ်ဆက်တိုက် B ထွက်တာနဲ့ သတိပေးချက် လှမ်းပို့ပေးပါ့မယ်ဗျာ။")
+            # OTP ကုဒ်ကို တိုက်ရိုက် အတင်းအဓမ္မ ထည့်သွင်းခိုင်းခြင်း
+            await client.sign_in(MY_PHONE_NUMBER, current_phone_code, phone_code_hash=phone_code_hash)
+            print("[LOGIN] Successfully authorized with Telegram!")
+            bot.send_message(MY_CHAT_ID, "✅ **Telegram Account ချိတ်ဆက်မှု အောင်မြင်သွားပါပြီဗျာ!**\n\nSniper Bot အသက်ဝင်သွားပါပြီ။ Mr.Wai SIGNAL ဂရုထဲက စာတွေကို စတင်စောင့်ကြည့်နေပါပြီဗျာ။")
         except Exception as e:
-            print(f"[ERROR] Sign in failed: {e}")
-            bot.send_message(MY_CHAT_ID, f"❌ Sign in မအောင်မြင်ပါဗျာ။ Error: {e}\nကျေးဇူးပြု၍ Render ကို Manual Deploy ပြန်လုပ်ပေးပါ။")
+            print(f"[ERROR] Login Failed: {e}")
+            bot.send_message(MY_CHAT_ID, f"❌ Sign in မအောင်မြင်ပါဗျာ။ Error: {e}\nကျေးဇူးပြု၍ Render ကို တစ်ခေါက်ပြန်ပွင့်ပေးပါ။")
             return
             
-    print("[START] Script is listening to group messages...")
+    print("[START] Connected! Listening to target private group...")
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
-    # Web Server ကို Thread ခွဲမောင်းနှင်ခြင်း
     t = Thread(target=run_flask)
     t.daemon = True
     t.start()
     
-    # Telethon ကို Async Loop ဖြင့် အသက်သွင်းခြင်း
+    # Async Event Loop ဖြင့် မောင်းနှင်ခြင်း
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main_login())
