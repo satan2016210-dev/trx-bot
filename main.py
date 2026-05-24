@@ -1,111 +1,97 @@
 import os
-import sys
-import time
-import requests
+import re
 from flask import Flask
 from threading import Thread
+import telethon
+from telethon import TelegramClient, events
+import telebot
 
-# ----------------- စနစ်အတွက် အချက်အလက်များ -----------------
-TELEGRAM_TOKEN = os.getenv('TOKEN')
-CHAT_ID = os.getenv('CHAT_ID')
-API_URL = "https://api.6a2d9r.com/api/games/trx-win/history"
+# --- [အခြေခံ SETTINGS များ] ---
+# TODO: သင့်ရဲ့ မူလ Bot Token နဲ့ သင့်ကိုယ်ပိုင် Telegram Chat ID ကို အောက်မှာ ပြန်ထည့်ပေးပါဗျာ
+BOT_TOKEN = 8589041336:AAHs4twJ3WgVN0T7-fSZuSdU-AJUovRWoBc
+MY_CHAT_ID = 1141743561
 
-if not TELEGRAM_TOKEN or not CHAT_ID:
-    print("CRITICAL ERROR: Render Settings ထဲတွင် TOKEN သို့မဟုတ် CHAT_ID မရှိသေးပါဗျာ။")
-    sys.exit(1)
+# my.telegram.org မှ ရရှိထားသော သော့ချက်များ
+API_ID = 32962994
+API_HASH = "527688e1a63242cae36f4b5f4e4339e2"
+TARGET_GROUP_NAME = "Mr.Wai SIGNAL"
 
-app = Flask(__name__)
+# Bot နှင့် Client များ တည်ဆောက်ခြင်း
+bot = telebot.TeleBot(BOT_TOKEN)
+client = TelegramClient('trx_session', API_ID, API_HASH)
 
-# UptimeRobot က လာပုတ်ရင် ချက်ချင်း "OK" ပြန်ပြီး ဆာဗာကို နိုးစေမည့်အလှည့်
+# ဗျူဟာမှတ်ဉာဏ်ပတ်လမ်း (ရလဒ် နောက်ဆုံး ၃ ကြိမ်စာ မှတ်ထားရန်)
+# ဥပမာ - ['S', 'B', 'S'] စသဖြင့် မှတ်ပါမည်။
+recent_results = []
+
+# --- [ဗျူဟာမြောက် တွက်ချက်မှုအပိုင်း] ---
+def check_strategy_and_alert(period, result, level):
+    global recent_results
+    
+    # ရလဒ်အသစ်ကို ပတ်လမ်းထဲ ထည့်ပြီး နောက်ဆုံး ၃ ကြိမ်စာပဲ ချန်မည်
+    recent_results.append(result)
+    if len(recent_results) > 3:
+        recent_results.pop(0)
+        
+    print(self_status_log := f"[INFO] အလှည့်: {period} | ရလဒ်: {result} | Level: {level} | ပတ်လမ်းလက်ရှိအခြေအနေ: {recent_results}")
+    
+    # ရလဒ် ၃ ကြိမ် ပြည့်ပြီဆိုမှ ဗျူဟာကို စစ်မည်
+    if len(recent_results) == 3:
+        # ဗျူဟာအိုင်ဒီယာ - (၀၊ ၁၊ ၂ မိနစ် အတွဲလိုက်ကြီး ၃ ကြိမ်ဆက်တိုက် S မပါရဘူး)
+        # တစ်နည်းအားဖြင့် ၃ ကြိမ်ဆက်တိုက် 'B' ချည်းပဲ ထွက်လာခဲ့လျှင် (Big, Big, Big ဖြစ်လျှင်) Sniper မိပြီ!
+        if recent_results == ['B', 'B', 'B']:
+            alert_message = (
+                "🎯 **TRX SNIPER ALERT!** 🎯\n\n"
+                "🔥 အပိုင်ကွက် ဗဟိုချက်မ မိပါပြီ! 🔥\n"
+                "⚠️ (၀၊ ၁၊ ၂ မိနစ်) ၃ ကြိမ်ဆက်တိုက် S မပါဘဲ B ချည်းပဲ ထွက်ထားပါတယ်!\n\n"
+                f"📈 နောက်ဆုံးအလှည့်: {period}\n"
+                f"📊 ထွက်သွားသောပုံစံ: {recent_results[0]} ➡️ {recent_results[1]} ➡️ {recent_results[2]}\n\n"
+                "⚡ အခုအလှည့်မှာ **S (Small)** ကို အပိုင် ဒိုင်းခနဲ သွားဆွဲလိုက်တော့ဗျာ! 🚀"
+            )
+            try:
+                bot.send_message(MY_CHAT_ID, alert_message, parse_mode="Markdown")
+                print("[SUCCESS] Alert message sent to your Telegram!")
+            except Exception as e:
+                print(f"[ERROR] Failed to send alert: {e}")
+
+# --- [TELEGRAM PRIVATE GROUP စောင့်ကြည့်သည့်အပိုင်း] ---
+@client.on(events.NewMessage)
+async def my_event_handler(event):
+    # စာဝင်လာသော Group/Channel နာမည်ကို စစ်ဆေးခြင်း
+    chat = await event.get_chat()
+    chat_title = getattr(chat, 'title', '')
+    
+    if TARGET_GROUP_NAME in chat_title:
+        message_text = event.raw_text
+        
+        # 'Trx 44 B2' သို့မဟုတ် 'Trx 37 S1' စာသားပုံစံကို Regular Expression ဖြင့် ဖတ်ခြင်း
+        match = re.search(r"Trx\s+(\d+)\s+([BS])(\d+)", message_text, re.IGNORECASE)
+        if match:
+            period = match.group(1)   # အလှည့် (ဥပမာ - 44)
+            result = match.group(2).upper()  # ရလဒ် B သို့မဟုတ် S
+            level = match.group(3)    # Level (ဥပမာ - 2)
+            
+            # ဗျူဟာ စစ်ဆေးရန် ပို့ပေးခြင်း
+            check_strategy_and_alert(period, result, level)
+
+# --- [WEB SERVER & KEEP ALIVE အပိုင်း] ---
+app = Flask('')
+
 @app.route('/')
 def home():
-    return "OK", 200
+    return "OK"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    # Threading သုံးပြီး ပေါ့ပေါ့ပါးပါး မောင်းနှင်ခြင်း
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=10000)
 
-def send_telegram_alert(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "Markdown"}
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print("Telegram error:", e)
-
-def monitor_trx():
-    # ရုတ်တရက် ဆာဗာနိုးနိုးချင်း API ဆီ တန်းမတောင်းဘဲ ဆာဗာ အခြေကျအောင် ၅ စက္ကန့် စောင့်ခြင်း
-    time.sleep(5)
-    last_period = ""
-    no_s_combo_count = 0 
+# --- [MAIN EXECUTION] ---
+if __name__ == '__main__':
+    # Web Server ကို Thread ခွဲပြီး မောင်းထားရန်
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
     
-    print("🚀 TRX Win Sniper Bot (012 Combo 3X Mode) စတင်ပါပြီ...")
-    
-    while True:
-        try:
-            response = requests.get(API_URL, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                game_list = data.get('data', {}).get('list', [])
-                
-                if not game_list or len(game_list) < 15:
-                    time.sleep(15)
-                    continue
-                    
-                latest_game = game_list[0]
-                current_period = str(latest_game['period'])
-                
-                if current_period != last_period:
-                    last_period = current_period
-                    current_minute = current_period[-1]
-                    
-                    if current_minute == '2':
-                        result_0 = None
-                        result_1 = None
-                        result_2 = None
-                        
-                        for game in game_list:
-                            p_str = str(game['period'])
-                            p_min = p_str[-1]
-                            
-                            if p_str[:-1] == current_period[:-1]:
-                                if p_min == '0': result_0 = game['result']
-                                if p_min == '1': result_1 = game['result']
-                                if p_min == '2': result_2 = game['result']
-                        
-                        if result_0 and result_1 and result_2:
-                            results_012 = [result_0, result_1, result_2]
-                            
-                            if "S" not in results_012 and "Small" not in results_012:
-                                no_s_combo_count += 1
-                                print(f"🔥 မိနစ် 012 S မပါမှု အောင်မြင်: {no_s_combo_count}/3")
-                            else:
-                                no_s_combo_count = 0
-                                print(f"❌ မိနစ် 012 တွင် S ပါသွားသဖြင့် 0 ပြန်စပါမည်။")
-                            
-                            if no_s_combo_count >= 3:
-                                msg = (
-                                    "🚨🚨🚨 *TRX WIN - SUPER SNIPER ALERT! (အထူးအပိုင်ကွက်)* 🚨🚨🚨\n\n"
-                                    "⚠️ *သတိပေးချက် အဆင့်မြင့် -* \n"
-                                    f"မိနစ် `0`၊ `1`၊ `2` အတွဲလိုက်ကြီး **(၃) ကြိမ်ဆက်တိုက်** အတွင်း `S (Small)` ထွက်ခြင်း လုံးဝ မရှိသေးပါခင်ဗျာ။\n\n"
-                                    f"📋 နောက်ဆုံးထွက်ခဲ့သည့် 012 ရလဒ်အတွဲ - `{results_012}`\n\n"
-                                    "🎯 ယခုလာမည့်အလှည့်များတွင် `S` ပြန်ထွက်ရန် အခွင့်အလမ်း အလွန်အမင်း မြင့်မားနေပါပြီ။ ဗျူဟာအတိုင်း လုံးဝ အပိုင်ဆွဲနိုင်ပါပြီဗျာ။"
-                                )
-                                send_telegram_alert(msg)
-                                no_s_combo_count = 0
-            
-            time.sleep(15)
-            
-        except Exception as e:
-            print("Error fetching data, retrying...", e)
-            time.sleep(10)
-
-if __name__ == "__main__":
-    # Flask Web Server ကို သီးသန့် Background Thread တစ်ခုအနေဖြင့် အရင်မောင်းမည်
-    server_thread = Thread(target=run_flask)
-    server_thread.daemon = True
-    server_thread.start()
-    
-    # ဂိမ်းဒေတာ စောင့်ကြည့်ရေးလုပ်ငန်းကို Main ပတ်လမ်းတွင် မောင်းမည်
-    monitor_trx()
+    print("[START] Telegram Client Script is starting...")
+    # Telegram Client ကို အသက်သွင်းပြီး မောင်းနှင်ခြင်း
+    client.start()
+    client.run_until_disconnected()
