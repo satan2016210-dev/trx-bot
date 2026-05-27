@@ -30,12 +30,13 @@ def get_latest_block_digit():
         last_char = block_hash[-1].lower()
         digit = int(last_char, 16) % 10 if not last_char.isdigit() else int(last_char)
         return digit
-    except:
+    except Exception as e:
+        print(f"API Error: {e}")
         return None
 
 async def main():
     global current_cycle_key, cycle_results
-    print("🚀 6Lottery Bot Started on Railway...")
+    print("🚀 6Lottery TRX Bot Started on Railway...")
 
     while True:
         now = datetime.now()
