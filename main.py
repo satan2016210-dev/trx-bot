@@ -34,7 +34,7 @@ def get_latest_block_digit():
         if block_hash:
             last_char = block_hash.strip()[-1].lower()
             digit = int(last_char, 16) % 10
-            print(f"Hash Last: '{last_char}' → Digit: {digit}")
+            print(f"✅ Hash Last: '{last_char}' → Digit: {digit}")
             return digit
         return None
     except Exception as e:
@@ -43,7 +43,7 @@ def get_latest_block_digit():
 
 async def main():
     global current_cycle_key, cycle_results
-    print("🚀 6Lottery TRX Bot (58-59s Mode) Started...")
+    print("🚀 6Lottery TRX Bot (54 Second Mode) Started...")
 
     while True:
         now = datetime.now()
@@ -51,14 +51,15 @@ async def main():
         second = now.second
         hour = now.strftime("%H")
 
-        # 58 နဲ့ 59 စက္ကန့်မှာ စစ်မယ်
-        if second in [58, 59]:
-            check_key = hour + minute + str(second)
+        # 54 စက္ကန့်မှာ ပဲ စစ်မယ်
+        if second == 54:
+            check_key = f"{hour}{minute}{second}"
+            
             if check_key != current_cycle_key:
                 current_cycle_key = check_key
                 
-                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (58-59s mode)")
-                
+                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (54s)")
+
                 last_digit = get_latest_block_digit()
                 
                 if last_digit is not None:
@@ -91,7 +92,7 @@ async def main():
                             
                             cycle_results = []
 
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.2)
 
 if __name__ == "__main__":
     asyncio.run(main())
