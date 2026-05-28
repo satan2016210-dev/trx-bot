@@ -29,23 +29,21 @@ def get_latest_block_digit():
     try:
         resp = requests.get(TRON_API, timeout=8)
         data = resp.json()
-        
         block_hash = data.get('block_header', {}).get('raw_data', {}).get('parentHash', '')
+        
         if block_hash:
             last_char = block_hash.strip()[-1].lower()
             digit = int(last_char, 16) % 10
-            print(f"✅ Hash Last Char: '{last_char}' → Digit: {digit}")
+            print(f"Hash Last: '{last_char}' → Digit: {digit}")
             return digit
-        else:
-            print("⚠️ No hash found")
-            return None
+        return None
     except Exception as e:
         print(f"API Error: {e}")
         return None
 
 async def main():
     global current_cycle_key, cycle_results
-    print("🚀 6Lottery TRX Bot (Final Version) Started...")
+    print("🚀 6Lottery TRX Bot (58-59s Mode) Started...")
 
     while True:
         now = datetime.now()
@@ -53,18 +51,21 @@ async def main():
         second = now.second
         hour = now.strftime("%H")
 
-        if minute in ["00","01","02","10","11","12","20","21","22","30","31","32","40","41","42","50","51","52"]:
-            if second <= 18 and (hour + minute) != current_cycle_key:  # ပိုကြာအောင် ချဲ့
+        # 58 နဲ့ 59 စက္ကန့်မှာ စစ်မယ်
+        if second in [58, 59]:
+            check_key = hour + minute + str(second)
+            if check_key != current_cycle_key:
+                current_cycle_key = check_key
                 
-                current_cycle_key = hour + minute
-                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (Minute: {minute})")
+                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (58-59s mode)")
                 
                 last_digit = get_latest_block_digit()
                 
                 if last_digit is not None:
                     result = "B" if last_digit >= 5 else "S"
-                    print(f"🎯 FINAL → {last_digit} | {result}")
+                    print(f"🎯 RESULT → {last_digit} | {result}")
 
+                    # 012 Cycle စစ်ဆေးမှု
                     if minute in ["00", "01", "02"]:
                         cycle_results.append(result)
 
@@ -90,7 +91,7 @@ async def main():
                             
                             cycle_results = []
 
-        await asyncio.sleep(0.35)
+        await asyncio.sleep(0.3)
 
 if __name__ == "__main__":
     asyncio.run(main())
