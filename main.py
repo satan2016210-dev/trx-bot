@@ -30,19 +30,30 @@ def get_latest_block_digit():
         resp = requests.get(TRON_API, timeout=10)
         data = resp.json()
         
-        # ပိုကောင်းတဲ့ နည်းလမ်း - block number ကို အဓိက သုံးမယ်
-        block_num = data['block_header']['raw_data']['number']
-        last_digit = block_num % 10
+        # Block Hash ကနေ နောက်ဆုံး စာလုံး ယူမယ် (6Lottery နဲ့ ပိုကိုက်အောင်)
+        block_hash = data.get('block_header', {}).get('raw_data', {}).get('parentHash', '')
         
-        print(f"Block Number: {block_num} → Last Digit: {last_digit}")
-        return last_digit
+        if block_hash:
+            last_char = block_hash.strip()[-1].lower()
+            # Hex character (0-9, a-f) ကို ဂဏန်း အဖြစ်ပြောင်း
+            if last_char.isdigit():
+                digit = int(last_char)
+            else:
+                digit = int(last_char, 16) % 10
+        else:
+            # အရန်အနေနဲ့ block number သုံး
+            block_num = data['block_header']['raw_data']['number']
+            digit = block_num % 10
+            
+        print(f"Block Hash Last: {last_char} → Digit: {digit}")
+        return digit
     except Exception as e:
         print(f"API Error: {e}")
         return None
 
 async def main():
     global current_cycle_key, cycle_results
-    print("🚀 6Lottery TRX Bot Started on Railway...")
+    print("🚀 6Lottery TRX Bot (Block Hash Mode) Started...")
 
     while True:
         now = datetime.now()
@@ -51,7 +62,7 @@ async def main():
         hour = now.strftime("%H")
 
         if minute in ["00","01","02","10","11","12","20","21","22","30","31","32","40","41","42","50","51","52"]:
-            if second <= 8 and (hour + minute) != current_cycle_key:
+            if second <= 9 and (hour + minute) != current_cycle_key:
                 
                 current_cycle_key = hour + minute
                 last_digit = get_latest_block_digit()
@@ -65,12 +76,10 @@ async def main():
 
                         if minute == "02" and len(cycle_results) >= 3:
                             cycle_str = "".join(cycle_results[-3:])
-                            print(f"   012 Cycle Result: {cycle_str}")
+                            print(f"   012 Cycle: {cycle_str}")
 
                             if cycle_str == "BBB":
                                 cycle_history.append("BBB")
-                                print(f"   Consecutive BBB: {len(cycle_history)}/4")
-                                
                                 if len(cycle_history) >= 4:
                                     alert = f"""
 🔥 <b>6LOTTERY BIG ALERT</b> 🔥
@@ -81,13 +90,13 @@ async def main():
 ⚠️ သတိထားပါ!
                                     """
                                     await bot.send_message(chat_id=CHAT_ID, text=alert, parse_mode=ParseMode.HTML)
-                                    print("✅ 4x BBBB ALERT SENT!")
+                                    print("✅ ALERT SENT!")
                             else:
                                 cycle_history.clear()
                             
                             cycle_results = []
 
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(0.5)
 
 if __name__ == "__main__":
     asyncio.run(main())
