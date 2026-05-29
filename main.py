@@ -1,49 +1,8 @@
-import asyncio
-import requests
-import os
-from datetime import datetime
-from collections import deque
-from telegram import Bot
-from telegram.constants import ParseMode
-
-# ================== Config ==================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID_STR = os.getenv("CHAT_ID")
-
-if not TELEGRAM_TOKEN or not CHAT_ID_STR:
-    print("❌ ERROR: Missing Token or Chat ID!")
-    exit()
-
-CHAT_ID = int(CHAT_ID_STR.strip())
-
-TRON_API = "https://api.trongrid.io/wallet/getnowblock"
-
-cycle_history = deque(maxlen=4)
-current_cycle_key = None
-cycle_results = []
-# ===========================================
-
-bot = Bot(token=TELEGRAM_TOKEN)
-
-def get_latest_block_digit():
-    try:
-        resp = requests.get(TRON_API, timeout=8)
-        data = resp.json()
-        block_hash = data.get('block_header', {}).get('raw_data', {}).get('parentHash', '')
-        
-        if block_hash:
-            last_char = block_hash.strip()[-1].lower()
-            digit = int(last_char, 16) % 10
-            print(f"✅ Hash Last: '{last_char}' → Digit: {digit}")
-            return digit
-        return None
-    except Exception as e:
-        print(f"API Error: {e}")
-        return None
-
 async def main():
     global current_cycle_key, cycle_results
     print("🚀 6Lottery TRX Bot (54 Second Mode) Started...")
+    
+    last_processed_minute = None  # ✅ Cycle tracking အတွက် အသစ်ထည့်
 
     while True:
         now = datetime.now()
@@ -51,23 +10,26 @@ async def main():
         second = now.second
         hour = now.strftime("%H")
 
-        # 54 စက္ကန့်မှာ ပဲ စစ်မယ်
         if second == 54:
             check_key = f"{hour}{minute}{second}"
-            
+
             if check_key != current_cycle_key:
                 current_cycle_key = check_key
-                
-                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (54s)")
 
+                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (54s)")
                 last_digit = get_latest_block_digit()
-                
+
                 if last_digit is not None:
                     result = "B" if last_digit >= 5 else "S"
                     print(f"🎯 RESULT → {last_digit} | {result}")
 
-                    # 012 Cycle စစ်ဆေးမှု
                     if minute in ["00", "01", "02"]:
+                        # ✅ Cycle အသစ် စတဲ့အချိန် clear လုပ်
+                        if minute == "00" and last_processed_minute != "00":
+                            cycle_results = []
+                            print("🔄 Cycle Reset at minute 00")
+
+                        last_processed_minute = minute
                         cycle_results.append(result)
 
                         if minute == "02" and len(cycle_results) >= 3:
@@ -76,23 +38,24 @@ async def main():
 
                             if cycle_str == "BBB":
                                 cycle_history.append("BBB")
-                                if len(cycle_history) >= 4:
+                                # ✅ Exactly 4 ကြိမ်မှ alert
+                                if len(cycle_history) == 4:
                                     alert = f"""
 🔥 <b>6LOTTERY BIG ALERT</b> 🔥
-
 🕒 အချိန်: {now.strftime('%Y-%m-%d %H:%M:%S')}
 📊 012 Cycle: <b>BBBB</b> (4 ခါ ဆက်တိုက်)
-
 ⚠️ သတိထားပါ!
                                     """
-                                    await bot.send_message(chat_id=CHAT_ID, text=alert, parse_mode=ParseMode.HTML)
+                                    await bot.send_message(
+                                        chat_id=CHAT_ID,
+                                        text=alert,
+                                        parse_mode=ParseMode.HTML
+                                    )
                                     print("✅ ALERT SENT!")
+                                    cycle_history.clear()  # ✅ Alert ပို့ပြီး reset
                             else:
                                 cycle_history.clear()
-                            
-                            cycle_results = []
+
+                            cycle_results = []  # ✅ Cycle ပြီးရင် clear
 
         await asyncio.sleep(0.2)
-
-if __name__ == "__main__":
-    asyncio.run(main())
