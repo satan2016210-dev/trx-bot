@@ -1,61 +1,50 @@
-async def main():
-    global current_cycle_key, cycle_results
-    print("🚀 6Lottery TRX Bot (54 Second Mode) Started...")
-    
-    last_processed_minute = None  # ✅ Cycle tracking အတွက် အသစ်ထည့်
+import asyncio
+import requests
+import os
+from datetime import datetime
+from telegram import Bot
+from telegram.constants import ParseMode
 
+# ================== Config ==================
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = int(os.getenv("CHAT_ID"))
+
+TRON_API = "https://api.trongrid.io/wallet/getnowblock"
+
+print("🚀 6Lottery TRX Bot Started...")
+
+bot = Bot(token=TELEGRAM_TOKEN)
+
+def get_digit():
+    try:
+        r = requests.get(TRON_API, timeout=10)
+        data = r.json()
+        hash_str = data.get('block_header', {}).get('raw_data', {}).get('parentHash', '')
+        if hash_str:
+            last = hash_str[-1].lower()
+            digit = int(last, 16) % 10
+            return digit
+        return None
+    except:
+        return None
+
+async def main():
     while True:
         now = datetime.now()
         minute = now.strftime("%M")
         second = now.second
-        hour = now.strftime("%H")
 
-        if second == 54:
-            check_key = f"{hour}{minute}{second}"
+        if second == 54:   # 54 စက္ကန့်မှာ စစ်မယ်
+            digit = get_digit()
+            if digit is not None:
+                result = "B" if digit >= 5 else "S"
+                print(f"[{now.strftime('%H:%M:%S')}] Digit: {digit} → {result}")
 
-            if check_key != current_cycle_key:
-                current_cycle_key = check_key
+                # 012 မိနစ်တွေမှာ ပဲ စစ်မယ်
+                if minute in ["00","01","02"]:
+                    print(f"   012 Cycle Check: {result}")
 
-                print(f"📍 Checking at {now.strftime('%H:%M:%S')} (54s)")
-                last_digit = get_latest_block_digit()
+        await asyncio.sleep(0.3)
 
-                if last_digit is not None:
-                    result = "B" if last_digit >= 5 else "S"
-                    print(f"🎯 RESULT → {last_digit} | {result}")
-
-                    if minute in ["00", "01", "02"]:
-                        # ✅ Cycle အသစ် စတဲ့အချိန် clear လုပ်
-                        if minute == "00" and last_processed_minute != "00":
-                            cycle_results = []
-                            print("🔄 Cycle Reset at minute 00")
-
-                        last_processed_minute = minute
-                        cycle_results.append(result)
-
-                        if minute == "02" and len(cycle_results) >= 3:
-                            cycle_str = "".join(cycle_results[-3:])
-                            print(f"   012 Cycle: {cycle_str}")
-
-                            if cycle_str == "BBB":
-                                cycle_history.append("BBB")
-                                # ✅ Exactly 4 ကြိမ်မှ alert
-                                if len(cycle_history) == 4:
-                                    alert = f"""
-🔥 <b>6LOTTERY BIG ALERT</b> 🔥
-🕒 အချိန်: {now.strftime('%Y-%m-%d %H:%M:%S')}
-📊 012 Cycle: <b>BBBB</b> (4 ခါ ဆက်တိုက်)
-⚠️ သတိထားပါ!
-                                    """
-                                    await bot.send_message(
-                                        chat_id=CHAT_ID,
-                                        text=alert,
-                                        parse_mode=ParseMode.HTML
-                                    )
-                                    print("✅ ALERT SENT!")
-                                    cycle_history.clear()  # ✅ Alert ပို့ပြီး reset
-                            else:
-                                cycle_history.clear()
-
-                            cycle_results = []  # ✅ Cycle ပြီးရင် clear
-
-        await asyncio.sleep(0.2)
+if __name__ == "__main__":
+    asyncio.run(main())
