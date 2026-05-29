@@ -19,7 +19,7 @@ TARGET_MINUTES = {
 cycle_history = deque(maxlen=4)
 current_cycle_key = None
 cycle_results = []
-last_reset_key = None  # Cycle reset tracking
+last_reset_key = None
 # ===========================================
 bot = Bot(token=TELEGRAM_TOKEN)
 
@@ -27,11 +27,14 @@ def get_latest_block_digit():
     try:
         resp = requests.get(TRON_API, timeout=8)
         data = resp.json()
-        block_hash = data.get('block_header', {}).get('raw_data', {}).get('parentHash', '')
-        if block_hash:
-            last_char = block_hash.strip()[-1].lower()
+
+        # ✅ blockID = Block Hash အပြည့်အစုံ (6Lottery နဲ့ ကိုက်ညီတယ်)
+        block_id = data.get('blockID', '')
+
+        if block_id:
+            last_char = block_id.strip()[-1].lower()
             digit = int(last_char, 16) % 10
-            print(f"✅ Hash Last: '{last_char}' → Digit: {digit}")
+            print(f"✅ Block Hash Last: '{last_char}' → Digit: {digit}")
             return digit
         return None
     except Exception as e:
@@ -94,11 +97,11 @@ async def main():
                                             parse_mode=ParseMode.HTML
                                         )
                                         print("✅ ALERT SENT!")
-                                        cycle_history.clear()  # Reset after alert
+                                        cycle_history.clear()
                                 else:
                                     cycle_history.clear()
 
-                                cycle_results = []  # Cycle ပြီးရင် clear
+                                cycle_results = []
 
         except Exception as e:
             print(f"❌ Error: {e}")
